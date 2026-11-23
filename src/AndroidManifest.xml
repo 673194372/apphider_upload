@@ -1,27 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.hider.applist"
-    android:versionCode="2"
-    android:versionName="2.0">
+    package="com.hider.envshield"
+    android:versionCode="1"
+    android:versionName="1.0">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
 
-    <!-- 读外部配置（HMA 导出的 JSON） -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
-
-    <!-- Android 13+ 读文件 -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-
     <application
         android:allowBackup="true"
-        android:label="应用列表隐藏器"
-        android:icon="@android:drawable/ic_menu_view"
+        android:label="设备环境盾"
+        android:icon="@android:drawable/ic_secure"
         android:supportsRtl="true"
-        android:requestLegacyExternalStorage="true"
         android:theme="@android:style/Theme.DeviceDefault.Light">
 
         <activity
@@ -36,7 +25,7 @@
         <!-- Xposed 模块声明 -->
         <meta-data android:name="xposedmodule" android:value="true" />
         <meta-data android:name="xposeddescription"
-            android:value="隐藏指定应用。支持导入 HMA 配置 JSON。兼容 FPA / LSPatch / LSPosed。" />
+            android:value="拦截开发者选项/USB调试/无线调试/Root/Hook/Frida/模拟器/无障碍/代理/蓝牙等环境检测。兼容 FPA / LSPatch / LSPosed。" />
         <meta-data android:name="xposedminversion" android:value="82" />
         <meta-data android:name="xposedscope" android:value="" />
 
