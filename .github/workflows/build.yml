@@ -39,17 +39,23 @@ jobs:
         run: |
           set -e
           MODDIR="src/com/hider/applist"
-          PKG="com.hider.applist"
           mkdir -p build/stub build/obj build/gen build/dex dist
 
           find stub -name "*.java" > build/stub_src.txt
           javac -source 8 -target 8 -encoding UTF-8 \
             -d build/stub @build/stub_src.txt
 
+          # 优先用模块自己的 manifest
+          MANIFEST="src/AndroidManifest.xml"
+          if [ -f "$MODDIR/AndroidManifest.xml" ]; then
+            MANIFEST="$MODDIR/AndroidManifest.xml"
+          fi
+          echo "manifest: $MANIFEST"
+
           "$BUILD_TOOLS/aapt2" link \
             -o build/base.apk \
             -I "$ANDROID_JAR" \
-            --manifest src/AndroidManifest.xml \
+            --manifest "$MANIFEST" \
             --java build/gen \
             --min-sdk-version 21 \
             --target-sdk-version 34
