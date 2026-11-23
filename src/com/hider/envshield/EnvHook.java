@@ -52,7 +52,7 @@ final class EnvHook {
             hookProxy();
         }
         if (cfg.hideBluetoothMac) {
-            hookBluetooth(cl);
+            hookBluetoothMac(cl);
         }
         XposedBridge.log(TAG + " 环境钩子已安装"
                 + " (emu=" + cfg.hideEmulator
