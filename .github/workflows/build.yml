@@ -1,4 +1,4 @@
-name: Build AppHider Module
+name: Build Xposed Modules
 
 on:
   push:
@@ -6,161 +6,176 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  apphider:
     runs-on: ubuntu-latest
-
+    if: ${{ hashFiles('src/com/hider/applist/HookEntry.java') != '' }}
     steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 配置 JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: 检查并配置 Android SDK
+      - name: 准备 Android SDK
         run: |
           set -e
-          echo "ANDROID_HOME=$ANDROID_HOME"
-
-          SDKMGR=""
-          for p in \
-            "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "$ANDROID_HOME/cmdline-tools/bin/sdkmanager" \
-            "$ANDROID_HOME/tools/bin/sdkmanager"
-          do
-            if [ -x "$p" ]; then SDKMGR="$p"; break; fi
-          done
-
-          if [ -n "$SDKMGR" ]; then
-            yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
-            "$SDKMGR" "platforms;android-34" "build-tools;34.0.0" || true
-          fi
-
           PLATFORM_DIR=""
           for d in "$ANDROID_HOME/platforms"/*; do
             if [ -f "$d/android.jar" ]; then PLATFORM_DIR="$d"; fi
           done
-          [ -z "$PLATFORM_DIR" ] && { echo "找不到 android.jar"; exit 1; }
+          [ -z "$PLATFORM_DIR" ] && { echo "no android.jar"; exit 1; }
           echo "ANDROID_JAR=$PLATFORM_DIR/android.jar" >> $GITHUB_ENV
 
-          BT_DIR=""
           if [ -d "$ANDROID_HOME/build-tools/34.0.0" ]; then
             BT_DIR="$ANDROID_HOME/build-tools/34.0.0"
           else
             BT_DIR=$(ls -1d "$ANDROID_HOME/build-tools"/* 2>/dev/null | sort -V | tail -1)
           fi
-          [ -z "$BT_DIR" ] && { echo "找不到 build-tools"; exit 1; }
+          [ -z "$BT_DIR" ] && { echo "no build-tools"; exit 1; }
           echo "BUILD_TOOLS=$BT_DIR" >> $GITHUB_ENV
-          echo "使用: $PLATFORM_DIR / $BT_DIR"
+          echo "OK: $PLATFORM_DIR / $BT_DIR"
 
-      - name: 编译 Xposed API stub（仅编译期用）
+      - name: 编译 AppHider
         run: |
           set -e
+          MODDIR="src/com/hider/applist"
+          PKG="com.hider.applist"
           mkdir -p build/stub build/obj build/gen build/dex dist
+
           find stub -name "*.java" > build/stub_src.txt
           javac -source 8 -target 8 -encoding UTF-8 \
-            -d build/stub \
-            @build/stub_src.txt
-          echo "stub 编译完成"
+            -d build/stub @build/stub_src.txt
 
-      - name: 编译资源
-        run: |
-          set -e
-          if [ -d src/res ]; then
-            "$BUILD_TOOLS/aapt2" compile --dir src/res -o build/res.zip
-          else
-            touch build/res.zip
-            echo "无 res 目录，跳过"
-          fi
+          "$BUILD_TOOLS/aapt2" link \
+            -o build/base.apk \
+            -I "$ANDROID_JAR" \
+            --manifest src/AndroidManifest.xml \
+            --java build/gen \
+            --min-sdk-version 21 \
+            --target-sdk-version 34
 
-      - name: 链接资源并生成 R.java
-        run: |
-          set -e
-          if [ -s build/res.zip ]; then
-            "$BUILD_TOOLS/aapt2" link \
-              -o build/base.apk \
-              -I "$ANDROID_JAR" \
-              --manifest src/AndroidManifest.xml \
-              --java build/gen \
-              --min-sdk-version 21 \
-              --target-sdk-version 34 \
-              build/res.zip
-          else
-            "$BUILD_TOOLS/aapt2" link \
-              -o build/base.apk \
-              -I "$ANDROID_JAR" \
-              --manifest src/AndroidManifest.xml \
-              --java build/gen \
-              --min-sdk-version 21 \
-              --target-sdk-version 34
-          fi
-          echo "资源链接完成"
-
-      - name: 编译主代码
-        run: |
-          set -e
-          find src -name "*.java" > build/main_src.txt
+          find "$MODDIR" -name "*.java" > build/main_src.txt
           if [ -d build/gen ]; then find build/gen -name "*.java" >> build/main_src.txt; fi
-          cat build/main_src.txt
+
           javac -source 8 -target 8 -encoding UTF-8 \
             -bootclasspath "$ANDROID_JAR" \
             -classpath "$ANDROID_JAR:build/stub" \
-            -d build/obj \
-            @build/main_src.txt
-          echo "主代码编译完成"
+            -d build/obj @build/main_src.txt
 
-      - name: 转换为 dex（只含主代码）
-        run: |
-          set -e
           find build/obj -name "*.class" > build/classes.txt
-          wc -l build/classes.txt
           "$BUILD_TOOLS/d8" --lib "$ANDROID_JAR" --min-api 21 \
-            --output build/dex \
-            $(cat build/classes.txt)
-          ls -la build/dex
+            --output build/dex $(cat build/classes.txt)
 
-      - name: 打包 dex 与 xposed_init
-        run: |
-          set -e
-          cd build/dex
-          zip -u ../base.apk classes.dex
-          cd ../..
-          cd src
-          zip -u ../build/base.apk assets/xposed_init
-          cd ..
-          echo "--- APK 内容 ---"
-          unzip -l build/base.apk
+          cd build/dex && zip -u ../base.apk classes.dex && cd ../..
+          cd src && zip -u ../build/base.apk assets/xposed_init && cd ..
 
-      - name: 对齐
-        run: |
           "$BUILD_TOOLS/zipalign" -f -p 4 build/base.apk build/aligned.apk
 
-      - name: 生成签名
-        run: |
           keytool -genkeypair -v \
-            -keystore build/release.keystore \
-            -alias apphider \
+            -keystore build/release.keystore -alias apphider \
             -keyalg RSA -keysize 2048 -validity 10000 \
             -storepass android -keypass android \
             -dname "CN=AppHider, OU=Dev, O=Local, L=NA, ST=NA, C=CN"
 
-      - name: 签名
-        run: |
-          set -e
           "$BUILD_TOOLS/apksigner" sign \
-            --ks build/release.keystore \
-            --ks-key-alias apphider \
-            --ks-pass pass:android \
-            --key-pass pass:android \
-            --out dist/AppHider.apk \
-            build/aligned.apk
+            --ks build/release.keystore --ks-key-alias apphider \
+            --ks-pass pass:android --key-pass pass:android \
+            --out dist/AppHider.apk build/aligned.apk
           "$BUILD_TOOLS/apksigner" verify --verbose dist/AppHider.apk
 
-      - name: 上传
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: AppHider-Module
+          name: AppHider-APK
           path: dist/AppHider.apk
+          retention-days: 30
+
+  envshield:
+    runs-on: ubuntu-latest
+    if: ${{ hashFiles('src/com/hider/envshield/HookEntry.java') != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 准备 Android SDK
+        run: |
+          set -e
+          PLATFORM_DIR=""
+          for d in "$ANDROID_HOME/platforms"/*; do
+            if [ -f "$d/android.jar" ]; then PLATFORM_DIR="$d"; fi
+          done
+          [ -z "$PLATFORM_DIR" ] && { echo "no android.jar"; exit 1; }
+          echo "ANDROID_JAR=$PLATFORM_DIR/android.jar" >> $GITHUB_ENV
+
+          if [ -d "$ANDROID_HOME/build-tools/34.0.0" ]; then
+            BT_DIR="$ANDROID_HOME/build-tools/34.0.0"
+          else
+            BT_DIR=$(ls -1d "$ANDROID_HOME/build-tools"/* 2>/dev/null | sort -V | tail -1)
+          fi
+          [ -z "$BT_DIR" ] && { echo "no build-tools"; exit 1; }
+          echo "BUILD_TOOLS=$BT_DIR" >> $GITHUB_ENV
+          echo "OK: $PLATFORM_DIR / $BT_DIR"
+
+      - name: 编译 EnvShield
+        run: |
+          set -e
+          MODDIR="src/com/hider/envshield"
+          mkdir -p build/stub build/obj build/gen build/dex dist
+
+          find stub -name "*.java" > build/stub_src.txt
+          javac -source 8 -target 8 -encoding UTF-8 \
+            -d build/stub @build/stub_src.txt
+
+          # EnvShield 用独立 manifest
+          MANIFEST="src/AndroidManifest.xml"
+          if [ -f "$MODDIR/AndroidManifest.xml" ]; then
+            MANIFEST="$MODDIR/AndroidManifest.xml"
+          fi
+          echo "manifest: $MANIFEST"
+
+          "$BUILD_TOOLS/aapt2" link \
+            -o build/base.apk \
+            -I "$ANDROID_JAR" \
+            --manifest "$MANIFEST" \
+            --java build/gen \
+            --min-sdk-version 21 \
+            --target-sdk-version 34
+
+          find "$MODDIR" -name "*.java" > build/main_src.txt
+          if [ -d build/gen ]; then find build/gen -name "*.java" >> build/main_src.txt; fi
+
+          javac -source 8 -target 8 -encoding UTF-8 \
+            -bootclasspath "$ANDROID_JAR" \
+            -classpath "$ANDROID_JAR:build/stub" \
+            -d build/obj @build/main_src.txt
+
+          find build/obj -name "*.class" > build/classes.txt
+          "$BUILD_TOOLS/d8" --lib "$ANDROID_JAR" --min-api 21 \
+            --output build/dex $(cat build/classes.txt)
+
+          cd build/dex && zip -u ../base.apk classes.dex && cd ../..
+          cd src && zip -u ../build/base.apk assets/xposed_init && cd ..
+
+          "$BUILD_TOOLS/zipalign" -f -p 4 build/base.apk build/aligned.apk
+
+          keytool -genkeypair -v \
+            -keystore build/release.keystore -alias envshield \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android -keypass android \
+            -dname "CN=EnvShield, OU=Dev, O=Local, L=NA, ST=NA, C=CN"
+
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks build/release.keystore --ks-key-alias envshield \
+            --ks-pass pass:android --key-pass pass:android \
+            --out dist/EnvShield.apk build/aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose dist/EnvShield.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: EnvShield-APK
+          path: dist/EnvShield.apk
           retention-days: 30
