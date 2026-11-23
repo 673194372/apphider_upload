@@ -1,4 +1,4 @@
-name: Build Xposed Modules
+﻿name: Build Xposed Modules
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
 jobs:
   apphider:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('src/com/hider/applist/HookEntry.java') != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -17,7 +16,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: 准备 Android SDK
+      - name: 鍑嗗 Android SDK
         run: |
           set -e
           PLATFORM_DIR=""
@@ -36,7 +35,7 @@ jobs:
           echo "BUILD_TOOLS=$BT_DIR" >> $GITHUB_ENV
           echo "OK: $PLATFORM_DIR / $BT_DIR"
 
-      - name: 编译 AppHider
+      - name: 缂栬瘧 AppHider
         run: |
           set -e
           MODDIR="src/com/hider/applist"
@@ -92,7 +91,6 @@ jobs:
 
   envshield:
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('src/com/hider/envshield/HookEntry.java') != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -101,7 +99,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: 准备 Android SDK
+      - name: 鍑嗗 Android SDK
         run: |
           set -e
           PLATFORM_DIR=""
@@ -120,7 +118,7 @@ jobs:
           echo "BUILD_TOOLS=$BT_DIR" >> $GITHUB_ENV
           echo "OK: $PLATFORM_DIR / $BT_DIR"
 
-      - name: 编译 EnvShield
+      - name: 缂栬瘧 EnvShield
         run: |
           set -e
           MODDIR="src/com/hider/envshield"
@@ -130,7 +128,7 @@ jobs:
           javac -source 8 -target 8 -encoding UTF-8 \
             -d build/stub @build/stub_src.txt
 
-          # EnvShield 用独立 manifest
+          # EnvShield 鐢ㄧ嫭绔?manifest
           MANIFEST="src/AndroidManifest.xml"
           if [ -f "$MODDIR/AndroidManifest.xml" ]; then
             MANIFEST="$MODDIR/AndroidManifest.xml"
