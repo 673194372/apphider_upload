@@ -74,6 +74,8 @@ public class HookEntry implements IXposedHookLoadPackage {
             // 顺序有讲究：
             // 1. DevOpt 最先（很多检测第一步查这个）
             DevOptHook.install(cl, cfg);
+            // 1b. DevOpt 补强（isDeveloperOptionsEnabled / ContentResolver 直查等）
+            DevOptExtraHook.install(cl, cfg);
             // 2. Root
             RootHook.install(cl, cfg);
             // 3. 包名隐藏
